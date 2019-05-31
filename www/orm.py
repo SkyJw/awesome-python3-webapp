@@ -30,3 +30,30 @@ async def select(sql, args, size=None):
         await cur.close()
         logging.info('rows returned: %s' % len(rs))
         return rs
+
+async def execute(sql, args):
+    logging.info(sql)
+    async with __pool.get() as conn:
+        try:
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                await cur.execute(sql.replace('?', '%s'), args)
+                affected =cur.rowcount
+        except BaseException as e:
+            raise
+        return affected;
+
+def create_args_string(num):
+    L = ['?' for n in range(num)]
+    return ','.join(L)
+
+class Field(object):
+    def __init__(self, name, column_type, primary_key,default):
+        self.name = name
+        self.column_type = column_type
+        self.primary_key = primary_key
+        self.default = default
+
+    def __str__(self):
+        return '<%s, %s : %s>' % (self.__class__.__name__, self.column_type, self.name)
+
+        
