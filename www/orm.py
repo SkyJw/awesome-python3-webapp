@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 
 async def create_pool(loop, **kw):
     logging.info('create database connection pool...')
@@ -56,4 +57,30 @@ class Field(object):
     def __str__(self):
         return '<%s, %s : %s>' % (self.__class__.__name__, self.column_type, self.name)
 
+class StringField(Field):
+    def __init__(self, name = None, primary_key = False, default = None, ddl = 'varchar(100)'):
+        super().__init__(name, ddl, primary_key, default)
+
+class BooleanField(Field):
+    def __init__(self, name = None, default = False):
+        super().__init__(name, 'boolean', False, default)
+
+class IntegerField(Field):
+    def __init__(self, name = None, primary_key = False, default = 0):
+        super().__init__(name, 'bigint', False, default)
+
+class FloatField(Field):
+    def __init__(self, name=None, primary_key=False, default=0.0):
+        super().__init__(name, 'real', primary_key, default)
         
+class TextField(Field):
+    def __init__(self, name=None, default=None):
+        super().__init__(name, 'text', False, default)  
+
+
+class ModelMetaclass(type):
+    def __new__(cls, name, bases, attrs):
+        if name == 'Model':
+            return type.__new__(cls, name, bases, attrs)#如果是Model类，则不需要通过元类来创建
+        tableName = attrs.get('__table__', None) or name#如果没有定义__table__,则使用name作tablename     
+
