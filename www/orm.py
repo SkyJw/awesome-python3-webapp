@@ -133,3 +133,13 @@ class Model(dict):
 
     def getValue(self, key):
         return getattr(self, key, None)
+
+    def getValueOrDefault(self, key):
+        value = getattr(self, key, None)
+        if field.default is not None:
+            if value is None: #不是model的直接属性，则是表的某一字段
+                field = self.__mapping__[key]
+                value = field.default() if callable(field.default) else field.default
+                logging.debug('using default value for %s: %s' % (key, str(value)))
+                setattr(self, key, value)
+        return value
