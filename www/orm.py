@@ -25,7 +25,7 @@ async def select(sql, args, size=None):
         cur = await conn.cursor(aiomysql.DictCursor)
         await cur.execute(sql.replace('?', '%s'), args or ())
         if size:
-            rs = await cur.fetchmany(size)
+            rs = await cur.fetchmany(size) #返回元组的列表，一个元组即为表中的一条记录
         else:
             rs = await cur.fetchall()
         await cur.close()
@@ -116,8 +116,8 @@ class ModelMetaclass(type):
         attrs['__delete__'] = 'delete from `%s` where `%s`=?' % (tableName, primaryKey)
         return type.__new__(cls, name, bases, attrs)
 
-#class Model(dict, metaclass = ModelMetaclass):
-class Model(dict):
+class Model(dict, metaclass = ModelMetaclass):
+#class Model(dict):
 
     def __init__(self, **kw):
         super(Model, self).__init__(**kw)
@@ -143,3 +143,37 @@ class Model(dict):
                 logging.debug('using default value for %s: %s' % (key, str(value)))
                 setattr(self, key, value)
         return value
+
+    @classmethod
+    async def findALL(cls, where = None, args = None, **kw):
+        ' find objects by where clause '
+        sql = [cls.__select__]
+
+        if where:
+            sql.append('where')
+            sql.append(where)    #select * from Websites where country = 'CN'
+
+        if args is None:
+            args = []
+
+        orderBy = kw.get('orderBy', None)#从参数字典获取键值为‘orderBy’的值，若无该键则获得None
+        if orderBy: #python中None,False,空字符串，空列表，空字典，空元组都相当于False，
+            sql.append('order by')#order by用于排序结果，默认递增排序，递减需在后面加desc，如order by SchoolNum desc
+            sql.append(orderBy)
+
+        limit = kw.get('limit', None)
+        if limit is not None: #limit是空字符串也会执行if
+            sql.append(limit)
+            if isinstance(limit, int):
+                sql.append('?')
+                args.append(limit) #limit用于限定结果，limit 1, 10表示从第二行数据开始，取10行数据
+            elif isinstance(limit, tuple) and len(limit) == 2:
+                sql.append('?', '?')
+                args.extend(limit) #extend 方法用于在列表最后后扩充多个值
+            else:
+                raise ValueError('Invalid limit value: %s' % str(limit))
+
+        rs = await select(' '.join(sql), args) #将sql列表元素，拼接成sql语句字符串，调用select函数执行，select返回元组的列表
+        return [cls(**r) for r in rs]
+
+
