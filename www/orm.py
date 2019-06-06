@@ -1,4 +1,5 @@
-import asyncio
+# -*- coding: utf-8 -*-
+import asyncio, logging
 import datetime
 
 async def create_pool(loop, **kw):
@@ -25,7 +26,7 @@ async def select(sql, args, size=None):
         cur = await conn.cursor(aiomysql.DictCursor)
         await cur.execute(sql.replace('?', '%s'), args or ())
         if size:
-            rs = await cur.fetchmany(size) #返回元组的列表，一个元组即为表中的一条记录
+            rs = await cur.fetchmany(size) #因为cursor为DictCursor,所以以字典形式返回表中记录，如{'name':'Sky', 'age': 26}
         else:
             rs = await cur.fetchall()
         await cur.close()
@@ -84,13 +85,13 @@ class ModelMetaclass(type):
             return type.__new__(cls, name, bases, attrs)#如果是Model类，则不需要通过元类来创建
         tableName = attrs.get('__table__', None) or name#如果没有定义__table__,则使用name作tablename
         logging.info('found model: %s (table : %s)' % (name, tableName))
-        mapping = dict()
+        mappings = dict()
         fields = []
         primaryKey = None
         for k, v in attrs.items(): #遍历字段属性
             if isinstance(v, Field):
                 logging.info(' found mapping: %s ==> %s' % (k, v)) 
-                mapping[k] = v #又用一个字典，存储了table中的字段映射关系
+                mappings[k] = v #又用一个字典，存储了table中的字段映射关系
                 if v.primary_key:
                     if primaryKey:
                         raise StandardError('Duplicate primary key for field: %s' % k)
@@ -100,12 +101,12 @@ class ModelMetaclass(type):
 
         if not primaryKey:
             raise StandardError('primary key not found.')
-        for k in mapping.keys():
+        for k in mappings.keys():
             attrs.pop(k) #将已经保留在mapping中的映射关系，在model子类中去除
 
         escaped_fields = list(map(lambda f: '`%s`' % f, fields)) #返回一个字符串列表，表中是形如'`name`'的字符串
 
-        attrs['__mapping__'] = mapping #保存属性和列的映射关系
+        attrs['__mapping__'] = mappings #保存属性和列的映射关系
         attrs['__table__'] = tableName
         attrs['__primary_key__'] = primaryKey #主键的属性名
         attrs['__fields__'] = fields #除主键外的所有字段的属性名
@@ -173,7 +174,50 @@ class Model(dict, metaclass = ModelMetaclass):
             else:
                 raise ValueError('Invalid limit value: %s' % str(limit))
 
-        rs = await select(' '.join(sql), args) #将sql列表元素，拼接成sql语句字符串，调用select函数执行，select返回元组的列表
-        return [cls(**r) for r in rs]
+        rs = await select(' '.join(sql), args) #将sql列表元素，拼接成sql语句字符串，调用select函数执行，select返回字典的列表
+        return [cls(**r) for r in rs] #以记录的字典来创建类的实例。这里到底返回的什么？？？类实例的列表？？？
+
+    @classmethod
+    async def findNumber(cls, selectField, where = None, args = None):
+        ' find number by select and where. '
+
+        #'_num_' 为自定义sql查询结果列名
+        sql = ['select %s _num_ from `%s`' % (selectField, cls.__table__)]
+        if where:
+            sql.append('where')
+            sql.append(where)
+        rs = await select(' '.join(sql), args, 1)
+
+        if len(rs) == 0:
+            return None
+        return rs[0]['_num_']
+
+    @classmethod
+    async def find(cls, pk):
+        ' find object by primary key. '
+        rs = await select('%s where `%s`=?' % (cls.__select__, cls.__primary_key__), [pk], 1)
+        if len(rs) == 0:
+            return None
+        return cls(**rs[0])
+
+    async def save(self):
+        args = list(map(self.getValueOrDefault, self.__fields__))#__fields__中都是字符串
+        args.append(self.getValueOrDefault(self.__primary_key__))
+
+        rows = await execute(self.__insert__, args)
+        if rows != 1:
+            logging.warn('Failed to insert record: affected rows %s' % rows)
 
 
+    async def update(self):
+        args = list(map(self.getValue, self.__fields__))
+        args.append(self.getValue(self.__primary_key__))
+        rows = await execute(self.__update__, args)
+        if rows != 1:
+            logging.warn('failed to update by primary key: affected rows: %s' % rows)
+
+    async def remove(self):
+        args = [self.getValue(self.__primary_key__)]
+        rows = await execute(self.__delete__, args)
+        if rows != 1:
+            logging.warn('failed to remove by primary key: affected rows: %s' % rows)
