@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import asyncio, logging
+import aiomysql
 import datetime
 
 async def create_pool(loop, **kw):
@@ -137,9 +138,10 @@ class Model(dict, metaclass = ModelMetaclass):
 
     def getValueOrDefault(self, key):
         value = getattr(self, key, None)
-        if field.default is not None:
-            if value is None: #不是model的直接属性，则是表的某一字段
-                field = self.__mapping__[key]
+        #因为在元类中，field属性应该都被pop掉了，所以此时类中应该没有对应属性
+        if value is None:
+            field = self.__mapping__[key]
+            if field.default is not None:
                 value = field.default() if callable(field.default) else field.default
                 logging.debug('using default value for %s: %s' % (key, str(value)))
                 setattr(self, key, value)
