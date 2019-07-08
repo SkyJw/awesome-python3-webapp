@@ -145,7 +145,7 @@ async def init(loop):
     add_routes(app, 'handlers')#handlers指的是handlers模块也就是handlers.py
     add_static(app)
     #监听127.0.0.1这个IP的9000端口的访问请求
-    srv = await loop.create_server(app.make_handler(), '127.0.0.1', 9012)
+    srv = await loop.create_server(app.make_handler(), '127.0.0.1', 9014)
     logging.info('server started at http://127.0.0.1:9000...')
     return srv
 #loop这货隐藏的很深，哥始终看不透它
